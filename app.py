@@ -31,12 +31,15 @@ def get_ydl_opts(extra={}):
         "no_warnings": True,
         "extractor_args": {
             "youtube": {
-                "player_client": ["android", "web"],
+                "player_client": ["ios", "android", "web"],
+                "player_skip": ["webpage", "configs"],
             }
         },
         "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.91 Mobile Safari/537.36",
+            "User-Agent": "com.google.android.youtube/17.36.4 (Linux; U; Android 12; GB) gzip",
+            "Accept-Language": "en-US,en;q=0.9",
         },
+        "socket_timeout": 30,
     }
     opts.update(extra)
     return opts
@@ -79,6 +82,11 @@ def get_info():
 
         video_formats.sort(key=lambda x: x["height"], reverse=True)
 
+        if not video_formats:
+            video_formats = [
+                {"format_id": "best", "quality": "সেরা কোয়ালিটি", "ext": "mp4", "size": "?", "height": 0},
+            ]
+
         return jsonify({
             "title": info.get("title", "ভিডিও"),
             "thumbnail": info.get("thumbnail", ""),
@@ -89,7 +97,13 @@ def get_info():
         })
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        err = str(e)
+        # ফ্রেন্ডলি error message
+        if "Sign in" in err or "bot" in err:
+            return jsonify({"error": "YouTube এই ভিডিওটি ডাউনলোড করতে দিচ্ছে না। অন্য একটি ভিডিও চেষ্টা করুন।"}), 400
+        if "Private" in err:
+            return jsonify({"error": "এই ভিডিওটি Private, ডাউনলোড করা যাবে না।"}), 400
+        return jsonify({"error": f"সমস্যা হয়েছে: {err}"}), 400
 
 
 @app.route("/download", methods=["POST"])
@@ -141,7 +155,10 @@ def download():
         return send_file(filename, as_attachment=True, download_name=safe_name)
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        err = str(e)
+        if "Sign in" in err or "bot" in err:
+            return jsonify({"error": "YouTube এই ভিডিওটি ডাউনলোড করতে দিচ্ছে না।"}), 400
+        return jsonify({"error": f"ডাউনলোড ব্যর্থ: {err}"}), 400
 
 
 def format_size(b):
