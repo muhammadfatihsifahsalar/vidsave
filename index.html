@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VidSave — ভিডিও ডাউনলোডার</title>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+Da+2:wght@400;600;800&family=Hind+Siliguri:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0a0a0f; --card:#13131a; --card2:#1a1a24;
+    --accent:#ff4d6d; --accent2:#ff8500; --accent3:#00d4ff;
+    --text:#f0f0f8; --muted:#777; --border:rgba(255,255,255,0.08);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:'Hind Siliguri',sans-serif;
+    min-height:100vh; overflow-x:hidden;
+  }
+  body::before{
+    content:''; position:fixed; top:-50%; left:-50%; width:200%; height:200%;
+    background:
+      radial-gradient(ellipse at 20% 20%,rgba(255,77,109,.09) 0%,transparent 50%),
+      radial-gradient(ellipse at 80% 80%,rgba(0,212,255,.07) 0%,transparent 50%),
+      radial-gradient(ellipse at 50% 50%,rgba(255,133,0,.05) 0%,transparent 60%);
+    animation:bgMove 15s ease-in-out infinite alternate;
+    z-index:0; pointer-events:none;
+  }
+  @keyframes bgMove{0%{transform:translate(0,0)}100%{transform:translate(3%,3%)}}
+
+  .wrap{position:relative;z-index:1;max-width:680px;margin:0 auto;padding:20px 16px 60px;}
+
+  /* Header */
+  .header{text-align:center;padding:44px 0 24px;animation:fdown .7s ease both;}
+  @keyframes fdown{from{opacity:0;transform:translateY(-18px)}to{opacity:1;transform:translateY(0)}}
+
+  .logo{
+    font-family:'Baloo Da 2',cursive; font-size:3rem; font-weight:800;
+    background:linear-gradient(135deg,var(--accent),var(--accent2),var(--accent3));
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+    background-clip:text; letter-spacing:-1px; line-height:1;
+  }
+  .tagline{color:var(--muted);font-size:.93rem;margin-top:8px;font-weight:300;}
+
+  .platforms{
+    display:flex;justify-content:center;gap:9px;
+    margin-top:18px;flex-wrap:wrap;
+    animation:fup .7s .15s ease both;
+  }
+  @keyframes fup{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+  .pb{padding:5px 13px;border-radius:20px;font-size:.74rem;font-weight:600;border:1px solid;}
+  .yt{color:#ff4444;border-color:rgba(255,68,68,.3);background:rgba(255,68,68,.08);}
+  .fb{color:#4a9eff;border-color:rgba(74,158,255,.3);background:rgba(74,158,255,.08);}
+  .tk{color:#00f0d4;border-color:rgba(0,240,212,.3);background:rgba(0,240,212,.08);}
+  .ig{color:#ff78a0;border-color:rgba(255,120,160,.3);background:rgba(255,120,160,.08);}
+  .tw{color:#1da1f2;border-color:rgba(29,161,242,.3);background:rgba(29,161,242,.08);}
+  .ot{color:#aaa;border-color:rgba(170,170,170,.3);background:rgba(170,170,170,.08);}
+
+  /* Input Card */
+  .icard{
+    background:var(--card); border:1px solid var(--border);
+    border-radius:22px; padding:26px; margin:24px 0 18px;
+    box-shadow:0 24px 64px rgba(0,0,0,.5);
+    animation:fup .7s .25s ease both;
+  }
+  .ilabel{
+    font-size:.78rem; color:var(--muted); margin-bottom:10px;
+    font-weight:600; text-transform:uppercase; letter-spacing:1px;
+  }
+  .irow{display:flex;gap:10px;}
+  .url-input{
+    flex:1; background:var(--card2); border:1.5px solid var(--border);
+    border-radius:13px; padding:14px 16px; color:var(--text);
+    font-size:.95rem; font-family:'Hind Siliguri',sans-serif; outline:none;
+    transition:border-color .3s,box-shadow .3s;
+  }
+  .url-input::placeholder{color:#333;}
+  .url-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(255,77,109,.15);}
+
+  .paste-btn{
+    background:var(--card2); border:1.5px solid var(--border);
+    border-radius:13px; padding:0 18px; color:var(--muted); cursor:pointer;
+    font-family:'Hind Siliguri',sans-serif; font-size:.82rem; font-weight:600;
+    transition:all .2s; white-space:nowrap;
+  }
+  .paste-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(255,77,109,.08);}
+
+  .go-btn{
+    width:100%; margin-top:14px; padding:16px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    border:none; border-radius:13px; color:#fff;
+    font-size:1.05rem; font-weight:700; font-family:'Baloo Da 2',cursive;
+    cursor:pointer; transition:all .3s; position:relative; overflow:hidden;
+  }
+  .go-btn::after{
+    content:''; position:absolute; inset:0;
+    background:linear-gradient(135deg,rgba(255,255,255,.12),transparent);
+    opacity:0; transition:opacity .3s;
+  }
+  .go-btn:hover::after{opacity:1;}
+  .go-btn:hover{transform:translateY(-2px);box-shadow:0 14px 40px rgba(255,77,109,.45);}
+  .go-btn:active{transform:translateY(0);}
+  .go-btn:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none;}
+
+  /* Loading */
+  .loading{display:none;text-align:center;padding:36px 20px;}
+  .loading.show{display:block;}
+  .spinner{
+    width:52px;height:52px;
+    border:3px solid rgba(255,77,109,.2);
+    border-top-color:var(--accent);
+    border-radius:50%;margin:0 auto 18px;
+    animation:spin .8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .ltext{color:var(--muted);font-size:.9rem;}
+
+  /* Error */
+  .err{
+    display:none; background:rgba(255,77,77,.08);
+    border:1px solid rgba(255,77,77,.25);
+    border-radius:14px; padding:20px; text-align:center; margin-bottom:16px;
+  }
+  .err.show{display:block;}
+  .err-text{color:#ff7777;font-size:.9rem;margin-top:6px;}
+
+  /* Result */
+  .rcard{
+    display:none; background:var(--card);
+    border:1px solid var(--border); border-radius:22px;
+    overflow:hidden; margin-bottom:20px;
+    box-shadow:0 24px 64px rgba(0,0,0,.5);
+    animation:fup .5s ease;
+  }
+  .rcard.show{display:block;}
+
+  .thumb{width:100%;aspect-ratio:16/9;background:var(--card2);position:relative;overflow:hidden;}
+  .thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+  .thumb-ov{
+    position:absolute;inset:0;
+    background:linear-gradient(to top,rgba(0,0,0,.65) 0%,transparent 55%);
+  }
+  .thumb-meta{
+    position:absolute; bottom:14px; left:16px; right:16px;
+    display:flex; justify-content:space-between; align-items:flex-end;
+  }
+  .vtitle-ov{
+    font-family:'Baloo Da 2',cursive; font-size:.95rem;
+    font-weight:700; color:#fff; text-shadow:0 2px 8px rgba(0,0,0,.6);
+    flex:1; padding-right:10px; line-height:1.3;
+  }
+  .dur-badge{
+    background:rgba(0,0,0,.75); color:#fff;
+    font-size:.75rem; font-weight:700;
+    padding:3px 8px; border-radius:6px; white-space:nowrap;
+  }
+
+  .rinfo{padding:20px;}
+  .uploader{color:var(--muted);font-size:.82rem;margin-bottom:16px;}
+
+  .sec-title{
+    font-size:.76rem; color:var(--muted); text-transform:uppercase;
+    letter-spacing:1px; font-weight:600; margin-bottom:10px;
+  }
+
+  .qgrid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(140px,1fr));
+    gap:9px; margin-bottom:18px;
+  }
+  .qbtn{
+    padding:13px 14px; background:var(--card2);
+    border:1.5px solid var(--border); border-radius:13px;
+    color:var(--text); cursor:pointer; text-align:center;
+    transition:all .2s; font-family:'Hind Siliguri',sans-serif;
+    position:relative; overflow:hidden;
+  }
+  .qbtn:hover{
+    border-color:var(--accent);background:rgba(255,77,109,.1);
+    transform:translateY(-2px);box-shadow:0 6px 20px rgba(255,77,109,.2);
+  }
+  .qbtn:active{transform:translateY(0);}
+  .qlabel{font-size:.88rem;font-weight:700;color:var(--accent);}
+  .qsize{font-size:.73rem;color:var(--muted);margin-top:3px;}
+  .qext{font-size:.68rem;color:#555;margin-top:2px;text-transform:uppercase;}
+
+  .divider{border:none;border-top:1px solid var(--border);margin:16px 0;}
+
+  .abtn{
+    width:100%; padding:14px; background:var(--card2);
+    border:1.5px solid rgba(0,212,255,.3); border-radius:13px;
+    color:var(--accent3); cursor:pointer; font-weight:700;
+    font-size:.9rem; font-family:'Hind Siliguri',sans-serif;
+    transition:all .2s;
+  }
+  .abtn:hover{background:rgba(0,212,255,.1);transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,212,255,.2);}
+  .abtn:active{transform:translateY(0);}
+
+  /* Progress overlay */
+  .prog-overlay{
+    display:none; position:fixed; inset:0;
+    background:rgba(0,0,0,.88); z-index:2000;
+    align-items:center; justify-content:center;
+  }
+  .prog-overlay.show{display:flex;}
+  .prog-box{
+    background:#13131a; border:1px solid rgba(255,255,255,.1);
+    border-radius:24px; padding:36px 28px; width:90%; max-width:380px;
+    text-align:center;
+  }
+  .prog-icon{font-size:3rem;margin-bottom:16px;}
+  .prog-title{
+    font-family:'Baloo Da 2',cursive; font-size:1.15rem;
+    font-weight:700; color:var(--accent2); margin-bottom:8px;
+  }
+  .prog-sub{color:var(--muted);font-size:.85rem;margin-bottom:24px;line-height:1.5;}
+  .prog-bar-wrap{
+    background:var(--card2); border-radius:10px;
+    height:8px; overflow:hidden; margin-bottom:20px;
+  }
+  .prog-bar{
+    height:100%; width:0%;
+    background:linear-gradient(90deg,var(--accent),var(--accent2));
+    border-radius:10px;
+    transition:width .4s ease;
+  }
+  .prog-cancel{
+    background:transparent; border:1px solid rgba(255,255,255,.1);
+    border-radius:10px; padding:10px 24px; color:var(--muted);
+    cursor:pointer; font-family:'Hind Siliguri',sans-serif; font-size:.85rem;
+  }
+  .prog-cancel:hover{background:rgba(255,255,255,.04);}
+
+  .footer{text-align:center;color:#222;font-size:.75rem;padding-top:8px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="logo">⬇ VidSave</div>
+    <div class="tagline">যেকোনো ভিডিও, যেকোনো প্ল্যাটফর্ম — সরাসরি ডাউনলোড করুন</div>
+    <div class="platforms">
+      <span class="pb yt">▶ YouTube</span>
+      <span class="pb fb">Facebook</span>
+      <span class="pb tk">TikTok</span>
+      <span class="pb ig">Instagram</span>
+      <span class="pb tw">Twitter / X</span>
+      <span class="pb ot">+ আরও অনেক</span>
+    </div>
+  </div>
+
+  <!-- Input -->
+  <div class="icard">
+    <div class="ilabel">🔗 ভিডিও লিংক পেস্ট করুন</div>
+    <div class="irow">
+      <input class="url-input" id="urlInput" type="url" placeholder="https://www.youtube.com/watch?v=..." />
+      <button class="paste-btn" onclick="pasteClip()">📋 পেস্ট</button>
+    </div>
+    <button class="go-btn" id="goBtn" onclick="fetchInfo()">
+      🔍 ভিডিও খুঁজুন
+    </button>
+  </div>
+
+  <!-- Loading -->
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <div class="ltext" id="ltext">ভিডিও তথ্য সংগ্রহ করা হচ্ছে...</div>
+  </div>
+
+  <!-- Error -->
+  <div class="err" id="errCard">
+    <div style="font-size:1.8rem">⚠️</div>
+    <div class="err-text" id="errText"></div>
+  </div>
+
+  <!-- Result -->
+  <div class="rcard" id="rcard">
+    <div class="thumb" id="thumbArea"></div>
+    <div class="rinfo">
+      <div class="uploader" id="uploader"></div>
+      <div class="sec-title">📹 ভিডিও কোয়ালিটি বেছে নিন</div>
+      <div class="qgrid" id="qgrid"></div>
+      <hr class="divider">
+      <div class="sec-title">🎵 শুধু অডিও</div>
+      <button class="abtn" id="abtn">🎵 MP3 ডাউনলোড করুন</button>
+    </div>
+  </div>
+
+  <div class="footer">VidSave • শুধুমাত্র ব্যক্তিগত ব্যবহারের জন্য</div>
+</div>
+
+<!-- Progress Overlay -->
+<div class="prog-overlay" id="progOverlay">
+  <div class="prog-box">
+    <div class="prog-icon">⬇️</div>
+    <div class="prog-title">ডাউনলোড হচ্ছে...</div>
+    <div class="prog-sub" id="progSub">ভিডিও প্রস্তুত করা হচ্ছে, একটু অপেক্ষা করুন।</div>
+    <div class="prog-bar-wrap"><div class="prog-bar" id="progBar"></div></div>
+    <button class="prog-cancel" onclick="closeProgress()">বাতিল করুন</button>
+  </div>
+</div>
+
+<script>
+let currentUrl = '';
+let progInterval = null;
+
+async function pasteClip() {
+  try {
+    const t = await navigator.clipboard.readText();
+    document.getElementById('urlInput').value = t;
+    if (t.startsWith('http')) fetchInfo();
+  } catch {
+    document.getElementById('urlInput').focus();
+  }
+}
+
+function setLoading(on, text) {
+  document.getElementById('loading').classList.toggle('show', on);
+  document.getElementById('ltext').textContent = text || '';
+  document.getElementById('goBtn').disabled = on;
+  if (on) {
+    document.getElementById('rcard').classList.remove('show');
+    document.getElementById('errCard').classList.remove('show');
+  }
+}
+
+function showErr(msg) {
+  setLoading(false);
+  document.getElementById('errText').textContent = msg;
+  document.getElementById('errCard').classList.add('show');
+}
+
+async function fetchInfo() {
+  const url = document.getElementById('urlInput').value.trim();
+  currentUrl = url;
+  if (!url) return showErr('প্রথমে একটি ভিডিও লিংক দিন!');
+  try { new URL(url); } catch { return showErr('সঠিক লিংক দিন!'); }
+
+  setLoading(true, 'ভিডিও তথ্য সংগ্রহ করা হচ্ছে...');
+
+  try {
+    const res = await fetch('/info', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({url})
+    });
+    const data = await res.json();
+    if (!res.ok) return showErr(data.error || 'কিছু একটা সমস্যা হয়েছে।');
+    setLoading(false);
+    renderResult(data);
+  } catch (e) {
+    showErr('সার্ভারের সাথে সংযোগ করা যাচ্ছে না।');
+  }
+}
+
+function renderResult(data) {
+  // Thumbnail
+  const thumb = document.getElementById('thumbArea');
+  thumb.innerHTML = data.thumbnail ? `
+    <img src="${data.thumbnail}" alt="thumbnail">
+    <div class="thumb-ov"></div>
+    <div class="thumb-meta">
+      <div class="vtitle-ov">${data.title}</div>
+      ${data.duration ? `<div class="dur-badge">${data.duration}</div>` : ''}
+    </div>` :
+    `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:4rem;">🎬</div>`;
+
+  document.getElementById('uploader').textContent =
+    data.uploader ? `👤 ${data.uploader}` : '';
+
+  // Quality grid
+  const grid = document.getElementById('qgrid');
+  if (data.formats && data.formats.length) {
+    grid.innerHTML = data.formats.map(f => `
+      <div class="qbtn" onclick="startDownload('${f.format_id}', false)">
+        <div class="qlabel">${f.quality}</div>
+        <div class="qsize">${f.size}</div>
+        <div class="qext">${f.ext}</div>
+      </div>`).join('');
+  } else {
+    grid.innerHTML = `
+      <div class="qbtn" onclick="startDownload('best',false)">
+        <div class="qlabel">সেরা কোয়ালিটি</div>
+        <div class="qsize">অটো</div>
+      </div>`;
+  }
+
+  document.getElementById('abtn').onclick = () => startDownload(null, true);
+  document.getElementById('rcard').classList.add('show');
+}
+
+function startDownload(formatId, audioOnly) {
+  showProgress(audioOnly);
+
+  fetch('/download', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({url: currentUrl, format_id: formatId, audio_only: audioOnly})
+  })
+  .then(async res => {
+    if (!res.ok) {
+      const d = await res.json();
+      closeProgress();
+      showErr(d.error || 'ডাউনলোড ব্যর্থ হয়েছে।');
+      return;
+    }
+    const blob = await res.blob();
+    const cd = res.headers.get('Content-Disposition') || '';
+    const match = cd.match(/filename[^;=\n]*=["']?([^"';\n]+)/);
+    const filename = match ? decodeURIComponent(match[1]) : (audioOnly ? 'audio.mp3' : 'video.mp4');
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    closeProgress();
+  })
+  .catch(() => {
+    closeProgress();
+    showErr('ডাউনলোড করা যায়নি। আবার চেষ্টা করুন।');
+  });
+}
+
+function showProgress(audioOnly) {
+  document.getElementById('progOverlay').classList.add('show');
+  document.getElementById('progSub').textContent =
+    audioOnly ? 'অডিও প্রস্তুত করা হচ্ছে...' : 'ভিডিও প্রস্তুত করা হচ্ছে...';
+  let w = 0;
+  clearInterval(progInterval);
+  progInterval = setInterval(() => {
+    w = Math.min(w + Math.random() * 8, 90);
+    document.getElementById('progBar').style.width = w + '%';
+  }, 600);
+}
+
+function closeProgress() {
+  clearInterval(progInterval);
+  document.getElementById('progBar').style.width = '100%';
+  setTimeout(() => {
+    document.getElementById('progOverlay').classList.remove('show');
+    document.getElementById('progBar').style.width = '0%';
+  }, 400);
+}
+
+// Auto on paste
+document.getElementById('urlInput').addEventListener('paste', () => {
+  setTimeout(() => {
+    const v = document.getElementById('urlInput').value.trim();
+    if (v.startsWith('http')) fetchInfo();
+  }, 120);
+});
+document.getElementById('urlInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') fetchInfo();
+});
+</script>
+</body>
+</html>
