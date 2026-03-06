@@ -1,48 +1,50 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, Response
 from flask_cors import CORS
-import yt_dlp
+import requests
 import os
 import tempfile
-import threading
-import time
 import re
+import urllib.parse
 
 app = Flask(__name__)
 CORS(app)
 
 DOWNLOAD_DIR = tempfile.mkdtemp()
 
-def clean_old_files():
-    while True:
-        now = time.time()
-        for f in os.listdir(DOWNLOAD_DIR):
-            fp = os.path.join(DOWNLOAD_DIR, f)
-            if os.path.isfile(fp) and now - os.path.getmtime(fp) > 3600:
-                os.remove(fp)
-        time.sleep(600)
-
-threading.Thread(target=clean_old_files, daemon=True).start()
-
 HTML_PAGE = open(os.path.join(os.path.dirname(__file__), "index.html")).read()
 
-def get_ydl_opts(extra={}):
-    opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["ios", "android", "web"],
-                "player_skip": ["webpage", "configs"],
-            }
-        },
-        "http_headers": {
-            "User-Agent": "com.google.android.youtube/17.36.4 (Linux; U; Android 12; GB) gzip",
-            "Accept-Language": "en-US,en;q=0.9",
-        },
-        "socket_timeout": 30,
+# Cobalt API instances - ফ্রি পাবলিক সার্ভার
+COBALT_INSTANCES = [
+    "https://cobalt.api.timur.lol",
+    "https://co.wuk.sh",
+    "https://api.cobalt.tools",
+]
+
+def cobalt_request(url):
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
     }
-    opts.update(extra)
-    return opts
+    payload = {
+        "url": url,
+        "vQuality": "max",
+        "filenameStyle": "pretty",
+    }
+    for instance in COBALT_INSTANCES:
+        try:
+            r = requests.post(
+                instance,
+                json=payload,
+                headers=headers,
+                timeout=15,
+            )
+            if r.status_code == 200:
+                data = r.json()
+                if data.get("status") in ["stream", "redirect", "tunnel", "picker"]:
+                    return data
+        except Exception:
+            continue
+    return None
 
 @app.route("/")
 def index():
@@ -55,130 +57,154 @@ def get_info():
     if not url:
         return jsonify({"error": "লিংক দিন"}), 400
 
-    ydl_opts = get_ydl_opts({"skip_download": True})
+    result = cobalt_request(url)
+    if not result:
+        return jsonify({"error": "ভিডিও খুঁজে পাওয়া যায়নি। লিংক চেক করুন।"}), 400
 
+    status = result.get("status")
+
+    # thumbnail বের করার চেষ্টা
+    thumbnail = ""
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+        if "youtube.com" in url or "youtu.be" in url:
+            vid_id = ""
+            if "v=" in url:
+                vid_id = url.split("v=")[1].split("&")[0]
+            elif "youtu.be/" in url:
+                vid_id = url.split("youtu.be/")[1].split("?")[0]
+            if vid_id:
+                thumbnail = f"https://img.youtube.com/vi/{vid_id}/maxresdefault.jpg"
+    except:
+        pass
 
-        formats = info.get("formats", [])
-        video_formats = []
-        seen = set()
-
-        for f in formats:
-            h = f.get("height")
-            ext = f.get("ext", "mp4")
-            fid = f.get("format_id")
-            if h and h not in seen and f.get("vcodec") != "none":
-                seen.add(h)
-                size = f.get("filesize") or f.get("filesize_approx") or 0
-                video_formats.append({
-                    "format_id": fid,
-                    "quality": f"{h}p",
-                    "ext": ext,
-                    "size": format_size(size),
-                    "height": h,
-                })
-
-        video_formats.sort(key=lambda x: x["height"], reverse=True)
-
-        if not video_formats:
-            video_formats = [
-                {"format_id": "best", "quality": "সেরা কোয়ালিটি", "ext": "mp4", "size": "?", "height": 0},
-            ]
-
+    if status == "picker":
+        # একাধিক ফাইল (TikTok slideshow ইত্যাদি)
+        items = result.get("picker", [])
+        formats = []
+        for i, item in enumerate(items[:6]):
+            formats.append({
+                "format_id": item.get("url", ""),
+                "quality": f"ফাইল {i+1}",
+                "ext": "mp4",
+                "size": "?",
+                "height": 0,
+                "direct_url": item.get("url", ""),
+            })
         return jsonify({
-            "title": info.get("title", "ভিডিও"),
-            "thumbnail": info.get("thumbnail", ""),
-            "duration": format_duration(info.get("duration", 0)),
-            "uploader": info.get("uploader", ""),
-            "platform": info.get("extractor_key", ""),
-            "formats": video_formats[:6],
+            "title": "ভিডিও",
+            "thumbnail": thumbnail,
+            "duration": "",
+            "uploader": "",
+            "platform": "",
+            "formats": formats,
+            "direct": True,
         })
-
-    except Exception as e:
-        err = str(e)
-        # ফ্রেন্ডলি error message
-        if "Sign in" in err or "bot" in err:
-            return jsonify({"error": "YouTube এই ভিডিওটি ডাউনলোড করতে দিচ্ছে না। অন্য একটি ভিডিও চেষ্টা করুন।"}), 400
-        if "Private" in err:
-            return jsonify({"error": "এই ভিডিওটি Private, ডাউনলোড করা যাবে না।"}), 400
-        return jsonify({"error": f"সমস্যা হয়েছে: {err}"}), 400
+    else:
+        direct_url = result.get("url", "")
+        filename = result.get("filename", "video.mp4")
+        formats = [
+            {
+                "format_id": "best",
+                "quality": "সেরা কোয়ালিটি",
+                "ext": filename.split(".")[-1] if "." in filename else "mp4",
+                "size": "?",
+                "height": 0,
+                "direct_url": direct_url,
+            }
+        ]
+        return jsonify({
+            "title": filename.rsplit(".", 1)[0] if "." in filename else filename,
+            "thumbnail": thumbnail,
+            "duration": "",
+            "uploader": "",
+            "platform": "",
+            "formats": formats,
+            "direct": True,
+            "direct_url": direct_url,
+            "filename": filename,
+        })
 
 
 @app.route("/download", methods=["POST"])
 def download():
     data = request.json
     url = data.get("url", "").strip()
-    format_id = data.get("format_id", "best")
+    direct_url = data.get("direct_url", "").strip()
     audio_only = data.get("audio_only", False)
 
     if not url:
         return jsonify({"error": "লিংক দিন"}), 400
 
-    out_path = os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s")
-
+    # Audio only হলে আলাদা cobalt request
     if audio_only:
-        extra = {
-            "format": "bestaudio/best",
-            "outtmpl": out_path,
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
         }
-    else:
-        extra = {
-            "format": f"{format_id}+bestaudio/best",
-            "outtmpl": out_path,
-            "merge_output_format": "mp4",
+        payload = {
+            "url": url,
+            "downloadMode": "audio",
+            "filenameStyle": "pretty",
         }
+        result = None
+        for instance in COBALT_INSTANCES:
+            try:
+                r = requests.post(instance, json=payload, headers=headers, timeout=15)
+                if r.status_code == 200:
+                    d = r.json()
+                    if d.get("status") in ["stream", "redirect", "tunnel"]:
+                        result = d
+                        break
+            except:
+                continue
+        if result:
+            direct_url = result.get("url", "")
 
-    ydl_opts = get_ydl_opts(extra)
+    if not direct_url:
+        result = cobalt_request(url)
+        if not result:
+            return jsonify({"error": "ডাউনলোড করা যায়নি।"}), 400
+        direct_url = result.get("url", "")
+
+    if not direct_url:
+        return jsonify({"error": "ডাউনলোড লিংক পাওয়া যায়নি।"}), 400
 
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
-            if audio_only:
-                base = os.path.splitext(filename)[0]
-                for ext in [".m4a", ".webm", ".opus", ".mp3"]:
-                    if os.path.exists(base + ext):
-                        filename = base + ext
-                        break
+        # Proxy করে পাঠাই
+        r = requests.get(direct_url, stream=True, timeout=60, headers={
+            "User-Agent": "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36"
+        })
 
-        if not os.path.exists(filename):
-            files = sorted(
-                [os.path.join(DOWNLOAD_DIR, f) for f in os.listdir(DOWNLOAD_DIR)],
-                key=os.path.getmtime, reverse=True
-            )
-            if files:
-                filename = files[0]
+        content_type = r.headers.get("Content-Type", "video/mp4")
+        content_disp = r.headers.get("Content-Disposition", "")
 
-        safe_name = re.sub(r'[^\w\s\-.]', '', os.path.basename(filename))
-        return send_file(filename, as_attachment=True, download_name=safe_name)
+        filename = "video.mp4"
+        if audio_only:
+            filename = "audio.mp3"
+        elif "filename=" in content_disp:
+            try:
+                filename = content_disp.split("filename=")[1].strip('"').strip("'")
+            except:
+                pass
+
+        safe_name = re.sub(r'[^\w\s\-.]', '', filename) or "video.mp4"
+
+        def generate():
+            for chunk in r.iter_content(chunk_size=8192):
+                if chunk:
+                    yield chunk
+
+        response = Response(
+            generate(),
+            content_type=content_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="{safe_name}"',
+            }
+        )
+        return response
 
     except Exception as e:
-        err = str(e)
-        if "Sign in" in err or "bot" in err:
-            return jsonify({"error": "YouTube এই ভিডিওটি ডাউনলোড করতে দিচ্ছে না।"}), 400
-        return jsonify({"error": f"ডাউনলোড ব্যর্থ: {err}"}), 400
-
-
-def format_size(b):
-    if not b:
-        return "?"
-    for u in ["B", "KB", "MB", "GB"]:
-        if b < 1024:
-            return f"{b:.1f} {u}"
-        b /= 1024
-    return f"{b:.1f} GB"
-
-
-def format_duration(sec):
-    if not sec:
-        return ""
-    m, s = divmod(int(sec), 60)
-    h, m = divmod(m, 60)
-    if h:
-        return f"{h}:{m:02d}:{s:02d}"
-    return f"{m}:{s:02d}"
+        return jsonify({"error": f"ডাউনলোড ব্যর্থ: {str(e)}"}), 400
 
 
 if __name__ == "__main__":
