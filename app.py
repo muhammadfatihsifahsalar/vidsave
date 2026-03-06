@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file, render_template_string
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import yt_dlp
 import os
@@ -13,7 +13,6 @@ CORS(app)
 DOWNLOAD_DIR = tempfile.mkdtemp()
 
 def clean_old_files():
-    """পুরোনো ফাইল মুছে ফেলে (১ ঘন্টার বেশি পুরনো)"""
     while True:
         now = time.time()
         for f in os.listdir(DOWNLOAD_DIR):
@@ -26,6 +25,22 @@ threading.Thread(target=clean_old_files, daemon=True).start()
 
 HTML_PAGE = open(os.path.join(os.path.dirname(__file__), "index.html")).read()
 
+def get_ydl_opts(extra={}):
+    opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "web"],
+            }
+        },
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.91 Mobile Safari/537.36",
+        },
+    }
+    opts.update(extra)
+    return opts
+
 @app.route("/")
 def index():
     return HTML_PAGE
@@ -37,11 +52,7 @@ def get_info():
     if not url:
         return jsonify({"error": "লিংক দিন"}), 400
 
-    ydl_opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "skip_download": True,
-    }
+    ydl_opts = get_ydl_opts({"skip_download": True})
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -94,44 +105,40 @@ def download():
     out_path = os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s")
 
     if audio_only:
-        ydl_opts = {
+        extra = {
             "format": "bestaudio/best",
             "outtmpl": out_path,
-            "postprocessors": [{
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "192",
-            }],
-            "quiet": True,
         }
     else:
-        ydl_opts = {
+        extra = {
             "format": f"{format_id}+bestaudio/best",
             "outtmpl": out_path,
             "merge_output_format": "mp4",
-            "quiet": True,
         }
+
+    ydl_opts = get_ydl_opts(extra)
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
             if audio_only:
-                filename = os.path.splitext(filename)[0] + ".mp3"
+                base = os.path.splitext(filename)[0]
+                for ext in [".m4a", ".webm", ".opus", ".mp3"]:
+                    if os.path.exists(base + ext):
+                        filename = base + ext
+                        break
 
         if not os.path.exists(filename):
-            for f in os.listdir(DOWNLOAD_DIR):
-                fp = os.path.join(DOWNLOAD_DIR, f)
-                if os.path.isfile(fp):
-                    filename = fp
-                    break
+            files = sorted(
+                [os.path.join(DOWNLOAD_DIR, f) for f in os.listdir(DOWNLOAD_DIR)],
+                key=os.path.getmtime, reverse=True
+            )
+            if files:
+                filename = files[0]
 
         safe_name = re.sub(r'[^\w\s\-.]', '', os.path.basename(filename))
-        return send_file(
-            filename,
-            as_attachment=True,
-            download_name=safe_name,
-        )
+        return send_file(filename, as_attachment=True, download_name=safe_name)
 
     except Exception as e:
         return jsonify({"error": str(e)}), 400
@@ -140,7 +147,7 @@ def download():
 def format_size(b):
     if not b:
         return "?"
-    for u in ["B","KB","MB","GB"]:
+    for u in ["B", "KB", "MB", "GB"]:
         if b < 1024:
             return f"{b:.1f} {u}"
         b /= 1024
